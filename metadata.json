@@ -1,0 +1,6 @@
+{
+  "name": "EMT-1 救護技術員模擬測驗系統",
+  "description": "提供 EMT-1 救護技術員選擇題與是非題模擬測驗、章節出題、自動批改、錯題統計、即時解析、錯題練習庫、測驗歷史與學習進度統計表。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
