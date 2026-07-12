@@ -188,7 +188,13 @@ export default function MistakeBank({
                       </div>
 
                       <p className="text-sm font-bold text-slate-700 dark:text-slate-200 leading-relaxed truncate">
-                        {q.question}
+                        {q.type === 'true_false' ? (() => {
+                          const match = q.question.match(/^對於「(.*?)」，正確答案是「(.*?)」。?$/);
+                          if (match) {
+                            return `【是非題】原題：${match[1]} ➔ 聲稱答案為「${match[2]}」`;
+                          }
+                          return q.question;
+                        })() : q.question}
                       </p>
                     </div>
 
@@ -222,11 +228,43 @@ export default function MistakeBank({
                         <div className="p-5 pl-14 space-y-5 text-sm">
                           
                           {/* Full Question */}
-                          <div className="space-y-1">
+                          <div className="space-y-3">
                             <span className="text-xs text-slate-400 font-bold block">完整考題題目：</span>
-                            <p className="font-extrabold text-slate-800 dark:text-slate-100 leading-relaxed">
-                              {q.question}
-                            </p>
+                            {q.type === 'true_false' ? (() => {
+                              const match = q.question.match(/^對於「(.*?)」，正確答案是「(.*?)」。?$/);
+                              if (match) {
+                                const [, stem, assertion] = match;
+                                return (
+                                  <div className="space-y-2.5">
+                                    <div className="bg-slate-50 dark:bg-slate-800/40 rounded-xl p-3.5 border border-slate-150 dark:border-slate-800/80">
+                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-[9px] font-black text-blue-700 dark:text-blue-300 mb-1.5 uppercase tracking-wide">
+                                        原題幹情境 / 敘述主體
+                                      </span>
+                                      <p className="text-xs md:text-sm font-bold text-slate-700 dark:text-slate-200 leading-relaxed">
+                                        {stem}
+                                      </p>
+                                    </div>
+                                    <div className="bg-amber-50/40 dark:bg-amber-950/10 rounded-xl p-3.5 border border-amber-100 dark:border-amber-900/30">
+                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-[9px] font-black text-amber-700 dark:text-amber-300 mb-1.5 uppercase tracking-wide">
+                                        是非題判斷斷言
+                                      </span>
+                                      <p className="text-xs md:text-sm font-extrabold text-slate-800 dark:text-slate-100 leading-relaxed">
+                                        上述說法「正確答案是：<span className="text-blue-600 dark:text-blue-400 font-extrabold underline decoration-wavy decoration-blue-500/50 underline-offset-4 bg-blue-50 dark:bg-blue-950/20 px-1 py-0.5 rounded">「{assertion}」</span>」是否正確？
+                                      </p>
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              return (
+                                <p className="font-extrabold text-slate-800 dark:text-slate-100 leading-relaxed">
+                                  {q.question}
+                                </p>
+                              );
+                            })() : (
+                              <p className="font-extrabold text-slate-800 dark:text-slate-100 leading-relaxed">
+                                {q.question}
+                              </p>
+                            )}
                           </div>
 
                           {/* Options list */}

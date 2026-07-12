@@ -281,9 +281,41 @@ export default function QuizEngine({
 
               {/* Question Text */}
               <div className="space-y-4">
-                <p className="text-lg font-extrabold text-slate-800 dark:text-slate-100 leading-relaxed">
-                  {currentQuestion.question}
-                </p>
+                {currentQuestion.type === 'true_false' ? (() => {
+                  const match = currentQuestion.question.match(/^對於「(.*?)」，正確答案是「(.*?)」。?$/);
+                  if (match) {
+                    const [, stem, assertion] = match;
+                    return (
+                      <div className="space-y-3.5">
+                        <div className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-4 md:p-5 border border-slate-150 dark:border-slate-850/60 shadow-inner">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-[10px] font-black text-blue-700 dark:text-blue-300 mb-2 uppercase tracking-wide">
+                            原題幹情境 / 敘述主體
+                          </span>
+                          <p className="text-base font-extrabold text-slate-800 dark:text-slate-200 leading-relaxed">
+                            {stem}
+                          </p>
+                        </div>
+                        <div className="bg-amber-50/40 dark:bg-amber-950/10 rounded-2xl p-4 md:p-5 border border-amber-100 dark:border-amber-900/30">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-[10px] font-black text-amber-700 dark:text-amber-300 mb-2 uppercase tracking-wide">
+                            是非題判斷斷言
+                          </span>
+                          <p className="text-base md:text-lg font-black text-slate-800 dark:text-slate-100 leading-relaxed">
+                            上述說法「正確答案是：<span className="text-blue-600 dark:text-blue-400 font-black underline decoration-wavy decoration-blue-500/50 underline-offset-4 bg-blue-50 dark:bg-blue-950/20 px-1.5 py-0.5 rounded-md">「{assertion}」</span>」是否正確？
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return (
+                    <p className="text-lg font-extrabold text-slate-800 dark:text-slate-100 leading-relaxed">
+                      {currentQuestion.question}
+                    </p>
+                  );
+                })() : (
+                  <p className="text-lg font-extrabold text-slate-800 dark:text-slate-100 leading-relaxed">
+                    {currentQuestion.question}
+                  </p>
+                )}
               </div>
 
               {/* Options */}
@@ -327,9 +359,6 @@ export default function QuizEngine({
                   }
 
                   const getOptionLetter = (idx: number) => {
-                    if (currentQuestion.type === 'true_false') {
-                      return idx === 0 ? 'O' : 'X';
-                    }
                     return String.fromCharCode(65 + idx); // A, B, C, D
                   };
 
@@ -342,13 +371,47 @@ export default function QuizEngine({
                       className={`flex items-center justify-between p-4 rounded-2xl border text-left card-hover-effect transition-all text-sm font-medium ${optionStyle}`}
                     >
                       <div className="flex items-center gap-3.5 pr-2">
-                        <span className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold font-mono border text-xs transition-colors shrink-0 ${
-                          isSelected 
-                            ? 'bg-blue-600 border-blue-600 text-white' 
-                            : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'
-                        }`}>
-                          {getOptionLetter(optIdx)}
-                        </span>
+                        {currentQuestion.type === 'true_false' ? (
+                          <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+                            isSelected 
+                              ? isStudy && hasUserAnsweredCurrent
+                                ? currentIsCorrect
+                                  ? 'border-emerald-500 bg-emerald-500/10'
+                                  : 'border-rose-500 bg-rose-500/10'
+                                : reviewMode
+                                  ? answers[currentQuestion.id] === currentQuestion.answerIndex
+                                    ? 'border-emerald-500 bg-emerald-500/10'
+                                    : 'border-rose-500 bg-rose-500/10'
+                                  : 'border-blue-600 bg-blue-50 dark:bg-blue-950/20'
+                              : isStudy && hasUserAnsweredCurrent && optIdx === currentQuestion.answerIndex
+                                ? 'border-emerald-500 bg-emerald-500/5'
+                                : reviewMode && optIdx === currentQuestion.answerIndex
+                                  ? 'border-emerald-500 bg-emerald-500/5'
+                                  : 'border-slate-300 dark:border-slate-600 bg-transparent'
+                          }`}>
+                            {(isSelected || (isStudy && hasUserAnsweredCurrent && optIdx === currentQuestion.answerIndex) || (reviewMode && optIdx === currentQuestion.answerIndex)) && (
+                              <div className={`w-2.5 h-2.5 rounded-full ${
+                                isStudy && hasUserAnsweredCurrent
+                                  ? optIdx === currentQuestion.answerIndex
+                                    ? 'bg-emerald-600'
+                                    : 'bg-rose-600'
+                                  : reviewMode
+                                    ? optIdx === currentQuestion.answerIndex
+                                      ? 'bg-emerald-600'
+                                      : 'bg-rose-600'
+                                    : 'bg-blue-600'
+                              }`} />
+                            )}
+                          </div>
+                        ) : (
+                          <span className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold font-mono border text-xs transition-colors shrink-0 ${
+                            isSelected 
+                              ? 'bg-blue-600 border-blue-600 text-white' 
+                              : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'
+                          }`}>
+                            {getOptionLetter(optIdx)}
+                          </span>
+                        )}
                         <span className="leading-relaxed">{option}</span>
                       </div>
                       {iconElement}

@@ -129,9 +129,13 @@ export default function QuestionImporter({
         let parsed = JSON.parse(trimmedText);
         if (!Array.isArray(parsed)) {
           if (parsed && typeof parsed === 'object') {
-            parsed = [parsed];
+            if (Array.isArray(parsed.questions)) {
+              parsed = parsed.questions;
+            } else {
+              parsed = [parsed];
+            }
           } else {
-            throw new Error('JSON 格式不符。必須為 JSON 陣列或單一考題物件。');
+            throw new Error('JSON 格式不符。必須為 JSON 陣列、包含 questions 陣列的物件或單一考題物件。');
           }
         }
 
