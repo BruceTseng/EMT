@@ -126,7 +126,52 @@ export default function QuestionImporter({
     // 1. JSON Auto-detection & Parsing
     if (trimmedText.startsWith('[') || trimmedText.startsWith('{')) {
       try {
-        let parsed = JSON.parse(trimmedText);
+        let parsed: any = null;
+        
+        // Try parsing directly first
+        try {
+          parsed = JSON.parse(trimmedText);
+        } catch (e) {
+          // If direct parsing fails, try to extract block with "questions" array
+          const questionsBlockIdx = trimmedText.indexOf('"questions"');
+          if (questionsBlockIdx !== -1) {
+            const startBraceIdx = trimmedText.lastIndexOf('{', questionsBlockIdx);
+            if (startBraceIdx !== -1) {
+              const candidateStr = trimmedText.substring(startBraceIdx);
+              for (let len = candidateStr.length; len > 0; len--) {
+                try {
+                  const testStr = candidateStr.substring(0, len);
+                  const parsedTest = JSON.parse(testStr);
+                  if (parsedTest && (Array.isArray(parsedTest.questions) || Array.isArray(parsedTest))) {
+                    parsed = parsedTest;
+                    break;
+                  }
+                } catch (innerErr) {}
+              }
+            }
+          }
+          
+          if (!parsed) {
+            // Try extracting all top-level curly braced objects
+            const matches = trimmedText.match(/\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}/g);
+            if (matches) {
+              for (const match of matches) {
+                try {
+                  const testObj = JSON.parse(match);
+                  if (testObj && (Array.isArray(testObj.questions) || Array.isArray(testObj))) {
+                    parsed = testObj;
+                    break;
+                  }
+                } catch (innerErr) {}
+              }
+            }
+          }
+          
+          if (!parsed) {
+            throw e; // rethrow original parse error if we couldn't recover
+          }
+        }
+
         if (!Array.isArray(parsed)) {
           if (parsed && typeof parsed === 'object') {
             if (Array.isArray(parsed.questions)) {
@@ -140,24 +185,38 @@ export default function QuestionImporter({
         }
 
         const parsedList: Question[] = [];
+        const chapterMap = new Map<string, number>();
+        let nextChapterNum = 19;
+
         parsed.forEach((item: any, i: number) => {
           if (!item.question) {
             throw new Error(`第 ${i + 1} 筆考題：題目 (question) 不能為空。`);
           }
-          if (item.answerIndex === undefined || isNaN(parseInt(item.answerIndex))) {
-            throw new Error(`第 ${i + 1} 筆考題：正確答案索引 (answerIndex) 必須存在且為數字。`);
+
+          // 1. Process ID safely
+          let id = item.id !== undefined ? String(item.id) : `imported-json-${Date.now()}-${i}`;
+          if (/^\d+$/.test(id)) {
+            id = `imported-${id}`;
           }
 
-          const id = item.id || `imported-json-${Date.now()}-${i}`;
-          const level = item.level || 'EMT-1';
-          const chapter = parseInt(item.chapter) || 99;
-          const chapterTitle = item.chapterTitle || '自訂匯入題庫';
-          const pageStart = item.pageStart !== undefined ? parseInt(item.pageStart) : undefined;
-          const pageEnd = item.pageEnd !== undefined ? parseInt(item.pageEnd) : undefined;
+          // 2. Process Type
           const typeRaw = item.type || 'single_choice';
           const type = (typeRaw === 'true_false' || typeRaw === 'tf') ? 'true_false' : 'single_choice';
 
-          let options = Array.isArray(item.options) ? item.options : [];
+          // 3. Process Options (could be array or object)
+          let options: string[] = [];
+          let optionKeys: string[] = [];
+
+          if (item.options) {
+            if (Array.isArray(item.options)) {
+              options = item.options.map((opt: any) => String(opt));
+            } else if (typeof item.options === 'object') {
+              const sortedKeys = Object.keys(item.options).sort();
+              optionKeys = sortedKeys;
+              options = sortedKeys.map(k => String(item.options[k]));
+            }
+          }
+
           if (type === 'true_false') {
             if (options.length === 0) {
               options = ['正確 (O)', '錯誤 (X)'];
@@ -168,9 +227,99 @@ export default function QuestionImporter({
             }
           }
 
-          const answerIndex = parseInt(item.answerIndex);
+          // 4. Process Answer & AnswerIndex
+          let answerIndex: number | undefined = undefined;
+
+          if (item.answerIndex !== undefined && !isNaN(parseInt(item.answerIndex))) {
+            answerIndex = parseInt(item.answerIndex);
+          } else if (item.answer !== undefined) {
+            const answerStr = String(item.answer).trim();
+            
+            // Try matching with option keys if options was an object
+            if (optionKeys.length > 0) {
+              const keyIdx = optionKeys.indexOf(answerStr);
+              if (keyIdx !== -1) {
+                answerIndex = keyIdx;
+              }
+            }
+
+            // Try matching by exact or suffix option value
+            if (answerIndex === undefined) {
+              const optIdx = options.findIndex(opt => opt === answerStr || opt.endsWith(answerStr));
+              if (optIdx !== -1) {
+                answerIndex = optIdx;
+              }
+            }
+
+            // Check if answer is a single letter (A, B, C, D) corresponding to option indexes
+            if (answerIndex === undefined && answerStr.length === 1) {
+              const charCode = answerStr.toUpperCase().charCodeAt(0);
+              if (charCode >= 65 && charCode <= 90) { // A-Z
+                const letterIdx = charCode - 65;
+                if (letterIdx < options.length) {
+                  answerIndex = letterIdx;
+                }
+              }
+            }
+          }
+
+          if (answerIndex === undefined) {
+            throw new Error(`第 ${i + 1} 筆考題：無法解析正確答案或答案索引 (answer/answerIndex)。`);
+          }
+
           if (answerIndex < 0 || answerIndex >= options.length) {
-            throw new Error(`第 ${i + 1} 筆考題：正確答案索引 answerIndex (${item.answerIndex}) 超出選項範圍 (0-${options.length - 1})。`);
+            throw new Error(`第 ${i + 1} 筆考題：正確答案索引 (${answerIndex}) 超出選項範圍 (0-${options.length - 1})。`);
+          }
+
+          // 5. Process Chapter & Chapter Title
+          const level = item.level || 'EMT-1';
+          let chapter = 99;
+          let chapterTitle = '自訂匯入題庫';
+
+          if (item.chapter !== undefined) {
+            const chStr = String(item.chapter).trim();
+            const parsedNum = parseInt(chStr);
+            if (!isNaN(parsedNum)) {
+              chapter = parsedNum;
+              chapterTitle = item.chapterTitle || `第 ${chapter} 章`;
+            } else {
+              // Try to find any number in the string
+              const numMatch = chStr.match(/\d+/);
+              if (numMatch) {
+                chapter = parseInt(numMatch[0]);
+                chapterTitle = item.chapterTitle || chStr;
+              } else {
+                // Map purely non-numeric chapter names to unique sequential numbers
+                if (!chapterMap.has(chStr)) {
+                  chapterMap.set(chStr, nextChapterNum++);
+                }
+                chapter = chapterMap.get(chStr)!;
+                chapterTitle = chStr;
+              }
+            }
+          }
+
+          const pageStart = item.pageStart !== undefined ? parseInt(item.pageStart) : undefined;
+          const pageEnd = item.pageEnd !== undefined ? parseInt(item.pageEnd) : undefined;
+
+          // 6. Process Difficulty
+          let difficulty = 2;
+          if (item.difficulty !== undefined) {
+            const diffStr = String(item.difficulty).toLowerCase().trim();
+            if (diffStr === 'easy') difficulty = 1;
+            else if (diffStr === 'medium') difficulty = 2;
+            else if (diffStr === 'hard') difficulty = 3;
+            else {
+              difficulty = parseInt(diffStr) || 2;
+            }
+          }
+
+          // 7. Process Tags
+          let tags: string[] = [];
+          if (Array.isArray(item.tags)) {
+            tags = item.tags.map((t: any) => String(t));
+          } else if (item.category) {
+            tags.push(String(item.category));
           }
 
           parsedList.push({
@@ -186,8 +335,8 @@ export default function QuestionImporter({
             answerIndex,
             explanation: item.explanation || '',
             practicalNote: item.practicalNote || '',
-            difficulty: parseInt(item.difficulty) || 2,
-            tags: Array.isArray(item.tags) ? item.tags.map((t: any) => String(t)) : [],
+            difficulty,
+            tags,
             source: item.source || undefined
           });
         });
